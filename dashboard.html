@@ -522,6 +522,30 @@
     table.drill-mode th:nth-child(4),
     table.drill-mode td:nth-child(4) { display: none; }
 
+    /* ─── TOAST ──────────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      top: 80px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-12px);
+      background: var(--surface2);
+      border: 1px solid var(--border-hi);
+      color: var(--text);
+      padding: 12px 24px;
+      border-radius: var(--r);
+      font-size: 0.88rem;
+      box-shadow: var(--shadow);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s, transform 0.25s;
+      z-index: 999;
+      white-space: nowrap;
+    }
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
     /* ─── ANIMATIONS ─────────────────────────────────────── */
     @keyframes fadeUp {
       from { opacity: 0; transform: translateY(20px); }
@@ -563,7 +587,7 @@
       <div class="brand-icon">📊</div>
       <div>
         <div class="brand-title">דשבורד הוצאות</div>
-        <div class="brand-subtitle">ניתוח חשבון בנק</div>
+        <div class="brand-subtitle">התוכנה פותחה ע"י אלכס גולדבלט</div>
       </div>
     </div>
     <div class="topbar-right">
@@ -606,13 +630,6 @@
 
       <!-- FILTER BAR -->
       <div id="filterBar">
-        <div class="filter-group">
-          <span class="filter-label">תקופה:</span>
-          <button class="pill active" data-range="all"  onclick="setRange(this,'all')">הכל</button>
-          <button class="pill"        data-range="6m"   onclick="setRange(this,'6m')">6 חודשים</button>
-          <button class="pill"        data-range="3m"   onclick="setRange(this,'3m')">3 חודשים</button>
-          <button class="pill"        data-range="1m"   onclick="setRange(this,'1m')">חודש אחרון</button>
-        </div>
         <div class="filter-group" id="catFilters" style="flex-wrap:wrap;gap:6px"></div>
       </div>
 
@@ -686,6 +703,7 @@
     </div><!-- /dashboard -->
   </div><!-- /main -->
 </div><!-- /app -->
+<div id="toast"></div>
 
 <script>
 // ── CATEGORIES ──────────────────────────────────────────────────────────────
@@ -960,10 +978,14 @@ function setRange(el, r) {
   renderAll();
 }
 
-function toggleCat(name, el) {
-  if (activeCats.has(name)) { activeCats.delete(name); el.classList.remove('active'); }
-  else { activeCats.add(name); el.classList.add('active'); }
-  renderAll();
+function toggleCat(name) {
+  if (drillCat !== null && drillCat !== name) {
+    showToast('ניתן לבחור קטגוריה אחת בלבד 🙅 בטל את הנוכחית תחילה');
+    return;
+  }
+  drillCat = (drillCat === name) ? null : name;
+  syncPillVisuals();
+  renderTable(filtered());
 }
 
 function buildCatFilters() {
@@ -976,7 +998,7 @@ function buildCatFilters() {
     b.className='pill';
     b.textContent=name;
     b.style.borderColor=cat?.color+'44';
-    b.onclick=()=>toggleCat(name,b);
+    b.onclick=()=>toggleCat(name);
     wrap.appendChild(b);
   });
 }
@@ -987,13 +1009,29 @@ const monthKey  = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'
 const HEB_MO    = ['ינו','פבר','מרץ','אפר','מאי','יונ','יול','אוג','ספט','אוק','נוב','דצמ'];
 const monthLbl  = k => { const [y,m]=k.split('-'); return `${HEB_MO[+m-1]} '${y.slice(2)}`; };
 
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+function syncPillVisuals() {
+  document.querySelectorAll('#catFilters .pill').forEach(b => {
+    b.classList.toggle('active', b.textContent === drillCat);
+  });
+}
+
 function exitDrill() {
   drillCat = null;
+  syncPillVisuals();
   renderTable(filtered());
 }
 
 function renderAll() {
   drillCat = null;
+  syncPillVisuals();
   const txs = filtered();
   if (!txs.length) return;
 
@@ -1087,7 +1125,8 @@ function renderPie(txs, total) {
           formatter(value, ctx) {
             const pct = ((value/total)*100).toFixed(1);
             if (parseFloat(pct) < 4) return '';
-            return fmt(value)+'\n'+pct+'%';
+            const name = ctx.chart.data.labels[ctx.dataIndex];
+            return name+'\n'+fmt(value)+'\n'+pct+'%';
           },
           anchor:'center',
           align:'center',
@@ -1099,6 +1138,7 @@ function renderPie(txs, total) {
         if (!elements.length) return;
         const name = entries[elements[0].index][0];
         drillCat = (drillCat === name) ? null : name;
+        syncPillVisuals();
         renderTable(filtered());
       }
     }
